@@ -1,0 +1,6 @@
+name_prompt: "Act as a profesional creative artist. This image is of an item you want to sell. Please provide a concise and catchy name for this item, suitable for an online store listing. The name should be no more than 5 words."
+description_prompt: "Please provide a catchy, detailed description of this item, suitable for an online store listing. The description should be no more than 30 words."
+# The following are the location IDs for the locations you want to use for the task. You can find the location IDs in the location settings page in the app.
+LOCATION_IDS:
+  - "XXXXXXX"
+  - "XXXXXXX"

@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "eccentric-easel"
+version = "0.1.0"
+description = "Inventory Manager"
+authors = ["Markus Kreitzer <markus@kreitzer.dev>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+openai= "^1.45.0"
+squareup= "^38.0.0.20240821"
+pyyaml = "^6.0.2"
+pillow = "^10.4.0"
+fastapi = "^0.114.1"
+
+[tool.poetry.group.dev.dependencies]
+isort = "^5.13.2"
+flake8 = "^7.1.1"
+black = "^24.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+add_item = "src.eccentric_easel.main:main"
