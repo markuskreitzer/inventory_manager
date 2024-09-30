@@ -1,3 +1,5 @@
+from pprint import pprint
+
 import qrcode
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
@@ -5,6 +7,7 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 import io
+import os
 
 def draw_price_tag(c, x, y, tag_width, tag_height, title, price, url):
     # Draw the tag border
@@ -94,18 +97,57 @@ def create_price_tags_pdf(filename, items):
 
     c.save()
 
-if __name__ == "__main__":
-    # Install required packages if not already installed
-    # pip install reportlab qrcode[pil]
+def extract_items_for_price_tags(catalog_objects):
+    items = []
+    for obj in catalog_objects:
+        # Ensure the object is an ITEM
+        if obj.get('type') != 'ITEM':
+            continue
 
-    # Sample data
+        item_data = obj.get('item_data', {})
+        title = item_data.get('name', 'No Title')
+        url = item_data.get('ecom_uri', '')  # E-commerce URL
+
+        # Get the first variation's price
+        variations = item_data.get('variations', [])
+        if not variations:
+            continue  # Skip items without variations
+
+        # Assuming the first variation is the one we want
+        variation_data = variations[0].get('item_variation_data', {})
+        price_money = variation_data.get('price_money', {})
+        amount = price_money.get('amount', 0)  # Amount is in cents
+        price = amount / 100.0  # Convert to dollars
+
+        items.append({'title': title, 'price': price, 'url': url})
+    return items
+
+def main():
+    try:
+        from square.client import Client as SquareClient
+        from square.http.auth.o_auth_2 import BearerAuthCredentials
+        square_client = SquareClient(
+            bearer_auth_credentials=BearerAuthCredentials(access_token=os.environ['SQUARE_APPLICATION_TOKEN']),
+            environment='production'
+        )
+    except KeyError as e:
+        raise ValueError(f"Environment variable '{e}' not set.")
+    catalog_response = square_client.catalog.list_catalog(types="ITEM").body
+    catalog_objects = catalog_response.get("objects", [])
+    items = extract_items_for_price_tags(catalog_objects)
+    create_price_tags_pdf("price_tags.pdf", items)
+
+
+if __name__ == "__main__":
+    """
+    Sample data and example.
     items = [
         {'title': 'Widget A', 'price': 1000, 'url': 'http://example.com/widget-a'},
         {'title': 'Widget B', 'price': 2000, 'url': 'http://example.com/widget-b'},
         {'title': 'Widget C', 'price': 3000, 'url': 'http://example.com/widget-c'},
         # Add more items as needed
     ]
-
-    # Create the PDF
     create_price_tags_pdf("price_tags.pdf", items)
+    """
+    main()
 
