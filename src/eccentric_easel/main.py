@@ -1,84 +1,97 @@
-import argparse
 import os
 from pathlib import Path
+from typing import Optional
+import base64
+from io import BytesIO
+from PIL import Image
 
 import yaml
+from fastapi import FastAPI
 from openai import OpenAI
-from square.client import Client as SquareClient
-from square.http.auth.o_auth_2 import BearerAuthCredentials
+from pydantic import BaseModel
+from typer import Typer, Option
 
 from eccentric_easel.ai_utils import generate_image_name, generate_image_description
-from eccentric_easel.square_utils import add_item_to_inventory
+from eccentric_easel.square_utils import post_item_to_catalog
 from eccentric_easel.utils import review_and_confirm
 
+app = FastAPI()
+cli = Typer()
 
-def main():
-    # Define command-line arguments
-    parser = argparse.ArgumentParser(description="Add an item to Square inventory based on an image.")
-    parser.add_argument("image_path", type=Path, help="Path to the image file")
-    parser.add_argument("--price", type=int, default=1000, help="Price amount in dollars")
-    parser.add_argument("--name", help="Name of the item (if provided, only description will be generated)")
-    args = parser.parse_args()
+class ItemRequest(BaseModel):
+    image: str
+    price: int = 1000
+    name: Optional[str] = None
 
-    # Load configuration from YAML file
+def generate_item_info(image_path: Path, price: int, name: Optional[str] = None) -> tuple:
     config_path = "config/configs.yml"
     try:
         with open(config_path) as config_file:
             config = yaml.safe_load(config_file)
     except FileNotFoundError:
-        print(f"Error: Configuration file '{config_path}' not found.")
-        return
+        raise ValueError(f"Configuration file '{config_path}' not found.")
     except yaml.YAMLError as e:
-        print(f"Error parsing configuration file: {e}")
-        return
+        raise ValueError(f"Error parsing configuration file: {e}")
 
-    # Initialize OpenAI and Square clients
+    # Initialize OpenAI client
     try:
-        #openai_client = OpenAI(api_key=os.environ['OPENAI_API_KEY'], base_url='http://localhost:11434/v1')
         openai_client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
-        square_client = SquareClient(
-            bearer_auth_credentials=BearerAuthCredentials(access_token=os.environ['SQUARE_APPLICATION_TOKEN']),
-            environment='production'
-        )
     except KeyError as e:
-        print(f"Error: Environment variable '{e}' not set.")
-        return
+        raise ValueError(f"Environment variable '{e}' not set.")
 
     # Generate item name and description
     try:
-        if not args.name:
-            #name = generate_image_name(args.image_path, config['name_prompt'], openai_client, model="llava:34b")
-            name = generate_image_name(args.image_path, config['name_prompt'], openai_client)
+        if not name:
+            name = generate_image_name(image_path, config['name_prompt'], openai_client)
         else:
-            name = args.name
+            name = name
 
-        description = generate_image_description(args.image_path, config['description_prompt'], openai_client)
-        #description = generate_image_description(args.image_path, config['description_prompt'], openai_client, model="llava:34b")
+        description = generate_image_description(image_path, config['description_prompt'], openai_client)
 
         if not name or not description:
             raise ValueError("Failed to generate name or description.")
     except Exception as e:
-        print(f"Error generating item info: {e}")
-        return
+        raise ValueError(f"Error generating item info: {e}")
 
-    # Get location ID from configuration
-    location_id = config.get('LOCATION_IDS', [])[1]  # Eccentric Easel
+    return name, description
 
-    confirmed, name, description, args.price = review_and_confirm(name, description, args.price)
-    if not confirmed:
-        exit()
-
+@cli.command()
+def add_item(
+    image_path: Path = Option(..., help="""Path to the image file. This can be a JPEG, PNG, or GIF file. The image will be resized to fit the catalog's image size requirements."""),
+    price: int = Option(1000, help="Price of the item in dollars"),
+    name: str = Option(None, help="Name of the item"),
+):
+    """Add an item to Square inventory based on an image."""
     try:
-        add_item_to_inventory(
-            args.image_path,
-            name,
-            description,
-            args.price,
-            location_id,  # This argument was missing
-            square_client  # This argument was missing
-        )
+        name, description = generate_item_info(image_path, price, name)
+        confirmed, name, description, price = review_and_confirm(name, description, price)
+        if confirmed:
+            post_item_to_catalog(image_path, name, description, price)
+    except ValueError as e:
+        print(f"Error: {e}")
+
+@app.post("/add_item/")
+async def add_item_api(item_request: ItemRequest):
+    """Add an item to Square inventory based on an image."""
+    try:
+        # Decode the base64 encoded image
+        image_bytes = base64.b64decode(item_request.image)
+        image = Image.open(BytesIO(image_bytes))
+        image_path = Path("temp_image.jpg")
+        image.save(image_path)
+
+        name, description = generate_item_info(image_path, item_request.price, item_request.name)
+        post_item_to_catalog(image_path, name, description, item_request.price)
+        return {"message": "Item added successfully",
+                "name": name,
+                "description": description,
+                "price": item_request.price
+                }
     except Exception as e:
-        print(f"Error adding item to catalog: {e}")
+        return {"error": f"Error adding item to catalog: {e}"}
+    finally:
+        # Remove the temporary image file
+        image_path.unlink()
 
 if __name__ == "__main__":
-    main()
+    cli()

@@ -3,10 +3,50 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
+
+import yaml
 #import base64
 
 from square.client import Client as SquareClient
+from square.http.auth.o_auth_2 import BearerAuthCredentials
+
+
 # from eccentric_easel.image_utils import resize_image
+
+
+def post_item_to_catalog(image_path: Path, name: str, description: str, price: int):
+    config_path = "config/configs.yml"
+    try:
+        with open(config_path) as config_file:
+            config = yaml.safe_load(config_file)
+    except FileNotFoundError:
+        raise ValueError(f"Configuration file '{config_path}' not found.")
+    except yaml.YAMLError as e:
+        raise ValueError(f"Error parsing configuration file: {e}")
+
+    # Initialize Square client
+    try:
+        square_client = SquareClient(
+            bearer_auth_credentials=BearerAuthCredentials(access_token=os.environ['SQUARE_APPLICATION_TOKEN']),
+            environment='production'
+        )
+    except KeyError as e:
+        raise ValueError(f"Environment variable '{e}' not set.")
+
+    # Get location ID from configuration
+    location_id = config.get('LOCATION_IDS', [])[1]  # Eccentric Easel
+
+    try:
+        add_item_to_inventory(
+            image_path,
+            name,
+            description,
+            price,
+            location_id,
+            square_client
+        )
+    except Exception as e:
+        raise ValueError(f"Error adding item to catalog: {e}")
 
 
 def add_item_to_inventory(image_path: Path,
