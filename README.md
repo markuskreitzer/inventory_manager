@@ -4,6 +4,8 @@ Manage inventory with Square's API. This program has the following features:
   - Adds the item to your Square inventory with a stock count of one.
   - Generates a PDF with: QR code, Title, and price of item.
 
+Use Python 3.14.10 from [python.org](https://www.python.org/downloads/release/python-31410/). Python 3.11 or later is required.
+
 The project uses poetry to manage dependencies and environment. To run, use the `poetry run {verb}` syntax. It also contains an API written with FastAPI.
 
 
